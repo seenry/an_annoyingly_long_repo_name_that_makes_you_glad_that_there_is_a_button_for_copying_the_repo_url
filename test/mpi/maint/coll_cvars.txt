@@ -239,6 +239,7 @@ algorithms:
             recursive_multiplying
                 .MPIR_CVAR_ALLREDUCE_RECURSIVE_MULTIPLYING_KVAL=2,3,4
             circ_vring
+            circ_rscatter
             reduce_scatter_allgather
 	    tree
                 .MPIR_CVAR_ALLREDUCE_TREE_TYPE=knomial_1,knomial_2,kary

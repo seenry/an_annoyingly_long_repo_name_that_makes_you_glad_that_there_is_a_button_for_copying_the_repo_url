@@ -59,11 +59,46 @@ int MPIR_Bcast_intra_circ_vring(void *buffer,
     };
     gen_rsched(rank, recv_sched, &args);
     gen_ssched(rank, &args);
+
+    // Datatype Handling:
+    MPI_Aint type_size;
+    int is_contig;
+    int buf_size;
+
+    MPIR_Datatype_get_size_macro(datatype, type_size);
+    buf_size = count * type_size;
+
+    if (HANDLE_IS_BUILTIN(datatype))
+        is_contig = 1;
+    else {
+        MPIR_Datatype_is_contig(datatype, &is_contig);
+    }
+    void* tmp_buf;
+    if (!is_contig) {
+        MPIR_CHKLMEM_MALLOC(tmp_buf, buf_size);
+        if (rank == root) {
+            mpi_errno = MPIR_Localcopy(buffer, count, datatype, tmp_buf, buf_size, MPIR_BYTE_INTERNAL);
+            MPIR_ERR_CHECK(mpi_errno);
+        }
+    } else {
+        tmp_buf = buffer;
+    }
     
+    // Handle Chunking
+    int n_chunk;
+    int last_msg_size;
+
+    if (chunk_size == 0) {
+        n_chunk = 1;
+        last_msg_size = buf_size;
+    } else {
+        n_chunk = (buf_size + chunk_size - 1) / chunk_size;
+        last_msg_size = (buf_size % chunk_size == 0)
+                      ? chunk_size
+                      : buf_size % chunk_size;
+    }
+
     // Run schedule
-
-    int n_chunk = 1;
-
     int x = (((depth - ((n_chunk - 1) % depth)) % depth) + depth) % depth;
     int offset = -x;
     MPIR_Request* requests[1];
@@ -72,13 +107,23 @@ int MPIR_Bcast_intra_circ_vring(void *buffer,
 
         if (send_sched[k] + offset >= 0) {
             int peer = (rank + skips[k]) % comm_size;
-            mpi_errno = MPIC_Isend(buffer, count, datatype, peer, MPIR_BCAST_TAG, comm, &requests[0], errflag);
+            
+            int send_block = send_sched[k] + offset;
+            if (send_block >= n_chunk) send_block = n_chunk - 1;
+            int msg_size = (send_block != n_chunk - 1) ? chunk_size : last_msg_size;
+
+            mpi_errno = MPIC_Isend((char*) tmp_buf + (chunk_size * send_block), msg_size, MPIR_BYTE_INTERNAL, peer, MPIR_BCAST_TAG, comm, &requests[0], errflag);
             MPIR_ERR_CHECK(mpi_errno);
             mpi_errno = MPIC_Waitall(1, requests, MPI_STATUSES_IGNORE);
             MPIR_ERR_CHECK(mpi_errno);
         } else if (recv_sched[k] + offset >= 0) {
             int peer = (rank - skips[k] + comm_size) % comm_size;
-            mpi_errno = MPIC_Irecv(buffer, count, datatype, peer, MPIR_BCAST_TAG, comm, &requests[0]);
+            
+            int recv_block = recv_sched[k] + offset;
+            if (recv_block >= n_chunk) recv_block = n_chunk - 1;
+            int msg_size = (recv_block != n_chunk - 1) ? chunk_size : last_msg_size;
+
+            mpi_errno = MPIC_Irecv((char*) tmp_buf + (chunk_size * recv_block), msg_size, MPIR_BYTE_INTERNAL, peer, MPIR_BCAST_TAG, comm, &requests[0]);
             MPIR_ERR_CHECK(mpi_errno);
             mpi_errno = MPIC_Waitall(1, requests, MPI_STATUSES_IGNORE);
             MPIR_ERR_CHECK(mpi_errno);
@@ -86,6 +131,13 @@ int MPIR_Bcast_intra_circ_vring(void *buffer,
 
         if (k == depth - 1) {
             offset += depth;
+        }
+    }
+
+    if (!is_contig) {
+        if (rank != root) {
+            mpi_errno = MPIR_Localcopy(tmp_buf, buf_size, MPIR_BYTE_INTERNAL, buffer, count, datatype);
+            MPIR_ERR_CHECK(mpi_errno);
         }
     }
     
