@@ -346,7 +346,9 @@ allreduce-intra:
         cvar_params: RECURSIVE_MULTIPLYING_KVAL
         restrictions: commutative
     circ_vring
-    circ_rscatter
+        restrictions: commutative
+    circ_rs_ag
+        restrictions: commutative
     reduce_scatter_allgather
         restrictions: size-ge-pof2, builtin-op
     tree

@@ -68,6 +68,11 @@ int MPIR_Bcast_intra_circ_vring(void *buffer,
     MPIR_Datatype_get_size_macro(datatype, type_size);
     buf_size = count * type_size;
 
+    // MPI_Aint true_extent, true_lb, extent;
+    // MPIR_Type_get_true_extent_impl(datatype, &true_lb, &true_extent);
+    // MPIR_Datatype_get_extent_macro(datatype, extent);
+    // printf("%d %d %d\n", type_size, extent, true_extent);
+
     if (HANDLE_IS_BUILTIN(datatype))
         is_contig = 1;
     else {
@@ -243,7 +248,6 @@ void gen_ssched(int r, struct sched_args_t* args) {
 }
 
 int get_baseblock(int r, struct sched_args_t* args) {
-    int baseblock = -1;
     int r_ = 0;
     for (int i = args->tree_depth - 1; i >= 0; i--) {
         if (r_ + args->skips[i] == r) {
