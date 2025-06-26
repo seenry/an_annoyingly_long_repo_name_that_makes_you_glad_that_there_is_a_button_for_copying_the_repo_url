@@ -415,8 +415,8 @@ void *MPII_Create_container(struct json_object *obj)
                 MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allreduce_intra_recursive_multiplying;
         else if (!strcmp(ckey, "algorithm=MPIR_Allreduce_intra_circ_vring"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allreduce_intra_circ_vring;
-        else if (!strcmp(ckey, "algorithm=MPIR_Allreduce_intra_circ_rscatter"))
-            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allreduce_intra_circ_rscatter;
+        else if (!strcmp(ckey, "algorithm=MPIR_Allreduce_intra_circ_rs_ag"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allreduce_intra_circ_rs_ag;
         else if (!strcmp(ckey, "algorithm=MPIR_Allreduce_intra_reduce_scatter_allgather"))
             cnt->id =
                 MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allreduce_intra_reduce_scatter_allgather;
