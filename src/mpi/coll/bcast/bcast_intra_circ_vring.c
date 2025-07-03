@@ -20,7 +20,7 @@ int MPIR_Bcast_intra_circ_vring(void *buffer,
                                 MPI_Aint count,
                                 MPI_Datatype datatype,
                                 int root, MPIR_Comm* comm,
-                                const int chunk_size, MPIR_Errflag_t errflag)
+                                const int chunk_size, int coll_attr)
 {
     int mpi_errno = MPI_SUCCESS;
 
@@ -117,7 +117,7 @@ int MPIR_Bcast_intra_circ_vring(void *buffer,
             if (send_block >= n_chunk) send_block = n_chunk - 1;
             int msg_size = (send_block != n_chunk - 1) ? chunk_size : last_msg_size;
 
-            mpi_errno = MPIC_Isend((char*) tmp_buf + (chunk_size * send_block), msg_size, MPIR_BYTE_INTERNAL, peer, MPIR_BCAST_TAG, comm, &requests[0], errflag);
+            mpi_errno = MPIC_Isend((char*) tmp_buf + (chunk_size * send_block), msg_size, MPIR_BYTE_INTERNAL, peer, MPIR_BCAST_TAG, comm, &requests[0], coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
             mpi_errno = MPIC_Waitall(1, requests, MPI_STATUSES_IGNORE);
             MPIR_ERR_CHECK(mpi_errno);

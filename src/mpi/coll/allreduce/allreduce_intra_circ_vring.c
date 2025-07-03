@@ -7,7 +7,7 @@ int MPIR_Allreduce_intra_circ_vring(const void* sendbuf,
                                     MPI_Datatype datatype,
                                     MPI_Op op,
                                     MPIR_Comm* comm,
-                                    MPIR_Errflag_t errflag)
+                                    int coll_attr)
 {
     int mpi_errno = MPI_SUCCESS;
 
@@ -64,7 +64,7 @@ int MPIR_Allreduce_intra_circ_vring(const void* sendbuf,
         int from = (rank + 1) % comm_size;
         mpi_errno = MPIC_Irecv(recvbuf, count, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[0]);
         MPIR_ERR_CHECK(mpi_errno);
-        mpi_errno = MPIC_Isend(true_send, count, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[1], errflag);
+        mpi_errno = MPIC_Isend(true_send, count, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[1], coll_attr);
         MPIR_ERR_CHECK(mpi_errno);
 
         mpi_errno = MPIC_Waitall(2, requests, MPI_STATUSES_IGNORE);
@@ -79,14 +79,14 @@ int MPIR_Allreduce_intra_circ_vring(const void* sendbuf,
         mpi_errno = MPIC_Irecv(tmp_buf, count, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[0]);
         MPIR_ERR_CHECK(mpi_errno);
         if (adjust) {
-            mpi_errno = MPIC_Isend(recvbuf, count, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[1], errflag);
+            mpi_errno = MPIC_Isend(recvbuf, count, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[1], coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
         } else {
             mpi_errno = MPIR_Localcopy(true_send, count, datatype, modified_send_buf, count, datatype);
             MPIR_ERR_CHECK(mpi_errno);
             mpi_errno = MPIR_Reduce_local(recvbuf, modified_send_buf, count, datatype, op);
             MPIR_ERR_CHECK(mpi_errno);
-            mpi_errno = MPIC_Isend(modified_send_buf, count, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[1], errflag);
+            mpi_errno = MPIC_Isend(modified_send_buf, count, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[1], coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
         }
         mpi_errno = MPIC_Waitall(2, requests, MPI_STATUSES_IGNORE);
