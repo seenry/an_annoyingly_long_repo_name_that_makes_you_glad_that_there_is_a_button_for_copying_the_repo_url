@@ -44,7 +44,7 @@ int MPIR_Scan_intra_recursive_doubling(const void *sendbuf,
                                        void *recvbuf,
                                        MPI_Aint count,
                                        MPI_Datatype datatype,
-                                       MPI_Op op, MPIR_Comm * comm_ptr, MPIR_Errflag_t errflag)
+                                       MPI_Op op, MPIR_Comm * comm_ptr, int coll_attr)
 {
     MPI_Status status;
     int rank, comm_size;
@@ -54,7 +54,7 @@ int MPIR_Scan_intra_recursive_doubling(const void *sendbuf,
     void *partial_scan, *tmp_buf;
     MPIR_CHKLMEM_DECL();
 
-    MPIR_THREADCOMM_RANK_SIZE(comm_ptr, rank, comm_size);
+    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
     is_commutative = MPIR_Op_is_commutative(op);
 
@@ -94,7 +94,7 @@ int MPIR_Scan_intra_recursive_doubling(const void *sendbuf,
             mpi_errno = MPIC_Sendrecv(partial_scan, count, datatype,
                                       dst, MPIR_SCAN_TAG, tmp_buf,
                                       count, datatype, dst,
-                                      MPIR_SCAN_TAG, comm_ptr, &status, errflag);
+                                      MPIR_SCAN_TAG, comm_ptr, &status, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
 
             if (rank > dst) {

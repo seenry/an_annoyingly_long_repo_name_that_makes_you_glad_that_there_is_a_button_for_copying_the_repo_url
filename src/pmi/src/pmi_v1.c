@@ -20,6 +20,7 @@
 
 #include "pmi_config.h"
 #include "mpl.h"
+#include "uthash.h"
 
 #include "pmi_util.h"
 #include "pmi.h"
@@ -166,6 +167,12 @@ PMI_API_PUBLIC int PMI_Init(int *spawned)
     pmi_errno = PMII_init(&PMI_server_version, &PMI_server_subversion);
     PMIU_ERR_POP(pmi_errno);
 
+    if (PMI_server_version * 100 + PMI_server_subversion > 101) {
+        /* enable PMIU_CS_{ENTER/EXIT} for PMI 1.2 and above */
+        PMIU_is_threaded = 1;
+        PMIU_thread_init();
+    }
+
     pmi_errno = PMII_getmaxes(&PMI_kvsname_max, &PMI_keylen_max, &PMI_vallen_max);
     PMIU_ERR_POP(pmi_errno);
 
@@ -301,7 +308,7 @@ PMI_API_PUBLIC int PMI_Barrier(void)
     goto fn_exit;
 }
 
-PMI_API_PUBLIC int PMI_Barrier_group(const int *group, int count)
+PMI_API_PUBLIC int PMI_Barrier_group(const int *group, int count, const char *tag)
 {
     int pmi_errno = PMI_SUCCESS;
 
@@ -327,27 +334,63 @@ PMI_API_PUBLIC int PMI_Barrier_group(const int *group, int count)
         goto fn_exit;
     }
 
+    int inttag = 0;
+    if (tag) {
+        HASH_FNV(tag, strlen(tag), inttag);
+        /* make sure it is positive in the wire protocol for robustness */
+        inttag = abs(inttag);
+    }
+
     char *group_str;
-    if (group == PMI_GROUP_WORLD) {
-        group_str = NULL;
+    if (group == PMI_GROUP_WORLD && !tag && !PMIU_is_threaded) {
+        /* Backward-compatible PMI_Barrier */
+        pmi_errno = PMI_Barrier();
+        goto fn_exit;
+    } else if (group == PMI_GROUP_WORLD) {
+        group_str = MPL_malloc(20, MPL_MEM_OTHER);
+        snprintf(group_str, 20, "WORLD:%d", inttag);
     } else if (group == PMI_GROUP_NODE) {
-        group_str = MPL_strdup("NODE");
+        group_str = MPL_malloc(20, MPL_MEM_OTHER);
+        snprintf(group_str, 20, "NODE:%d", inttag);
     } else {
         /* convert the int array into a comma-separated int list */
-        group_str = MPL_malloc(count * 8, MPL_MEM_OTHER);       /* assume each integer fits in 8 chars */
+        int size = count * 8;
+        group_str = MPL_malloc(size, MPL_MEM_OTHER);
         char *s = group_str;
         for (int i = 0; i < count; i++) {
-            int n = sprintf(s, "%d,", group[i]);
+            int n = snprintf(s, 8, "%d,", group[i]);
             s += n;
+            size -= n;
         }
         /* overwrite the last comma */
-        s[-1] = '\0';
+        s--;
+        size++;
+        snprintf(s, size, ":%d", inttag);
     }
 
     PMIU_msg_set_query_barrier(&pmicmd, USE_WIRE_VER, no_static, group_str);
 
-    pmi_errno = PMIU_cmd_get_response(PMI_fd, &pmicmd);
-    PMIU_ERR_POP(pmi_errno);
+    if (!PMIU_is_threaded) {
+        pmi_errno = PMIU_cmd_get_response(PMI_fd, &pmicmd);
+        PMIU_ERR_POP(pmi_errno);
+    } else {
+        PMIU_CS_ENTER;
+        pmi_errno = PMIU_cmd_send(PMI_fd, &pmicmd);
+        PMIU_CS_EXIT;
+        PMIU_ERR_POP(pmi_errno);
+
+        while (true) {
+            bool flag;
+            PMIU_CS_ENTER;
+            pmi_errno = PMIU_cmd_test_barrier(PMI_fd, inttag, &flag);
+            PMIU_CS_EXIT;
+            PMIU_ERR_POP(pmi_errno);
+            if (flag) {
+                break;
+            }
+            MPL_thread_yield();
+        }
+    }
 
     MPL_free(group_str);
 
@@ -468,9 +511,6 @@ PMI_API_PUBLIC int PMI_KVS_Put(const char kvsname[], const char key[], const cha
     int pmi_errno = PMI_SUCCESS;
     const char *use_kvsname = kvsname;
 
-    struct PMIU_cmd pmicmd;
-    PMIU_cmd_init_zero(&pmicmd);
-
     /* This is a special hack to support singleton initialization */
     if (PMI_initialized == SINGLETON_INIT_BUT_NO_PM) {
         int rc;
@@ -486,6 +526,11 @@ PMI_API_PUBLIC int PMI_KVS_Put(const char kvsname[], const char key[], const cha
         return PMI_SUCCESS;
     }
 
+    struct PMIU_cmd pmicmd;
+    PMIU_cmd_init_zero(&pmicmd);
+
+    PMIU_CS_ENTER;
+
     if (strcmp(kvsname, "singinit") == 0) {
         use_kvsname = singinit_kvsname;
     }
@@ -497,6 +542,7 @@ PMI_API_PUBLIC int PMI_KVS_Put(const char kvsname[], const char key[], const cha
 
   fn_exit:
     PMIU_cmd_free_buf(&pmicmd);
+    PMIU_CS_EXIT;
     return pmi_errno;
   fn_fail:
     goto fn_exit;
@@ -515,19 +561,22 @@ PMI_API_PUBLIC int PMI_KVS_Get(const char kvsname[], const char key[], char valu
     int pmi_errno = PMI_SUCCESS;
     const char *use_kvsname = kvsname;
 
-    struct PMIU_cmd pmicmd;
-    PMIU_cmd_init_zero(&pmicmd);
-
     /* singleton can skip PMI builtin keys */
     if (PMI_initialized == SINGLETON_INIT_BUT_NO_PM && strncmp(key, "PMI_", 4) == 0) {
         return PMI_FAIL;
     }
+
     /* Connect to the PM if we haven't already.  This is needed in case
      * we're doing an MPI_Comm_join or MPI_Comm_connect/accept from
      * the singleton init case.  This test is here because, in the way in
      * which MPICH uses PMI, this is where the test needs to be. */
     if (PMIi_InitIfSingleton() != 0)
         return PMI_FAIL;
+
+    struct PMIU_cmd pmicmd;
+    PMIU_cmd_init_zero(&pmicmd);
+
+    PMIU_CS_ENTER;
 
     if (strcmp(kvsname, "singinit") == 0) {
         use_kvsname = singinit_kvsname;
@@ -547,6 +596,7 @@ PMI_API_PUBLIC int PMI_KVS_Get(const char kvsname[], const char key[], char valu
 
   fn_exit:
     PMIU_cmd_free_buf(&pmicmd);
+    PMIU_CS_EXIT;
     return pmi_errno;
   fn_fail:
     goto fn_exit;

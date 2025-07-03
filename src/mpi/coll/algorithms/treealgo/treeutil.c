@@ -556,7 +556,7 @@ static int MPII_Treeutil_hierarchy_populate(MPIR_Comm * comm, int rank, int nran
     /* Dump hierarchy for debugging */
     if (MPIR_CVAR_HIERARCHY_DUMP) {
         char outfile_name[PATH_MAX];
-        sprintf(outfile_name, "%s%d", "hierarchy", rank);
+        snprintf(outfile_name, sizeof(outfile_name), "%s%d", "hierarchy", rank);
         FILE *outfile = fopen(outfile_name, "w");
         tree_topology_dump_hierarchy(hierarchy, rank, outfile);
         fclose(outfile);
@@ -604,8 +604,9 @@ int MPII_Treeutil_tree_topology_aware_init(MPIR_Comm * comm, int k, int root, bo
                                            MPIR_Treealgo_tree_t * ct)
 {
     int mpi_errno = MPI_SUCCESS;
-    int rank = comm->rank;
-    int nranks = comm->local_size;
+    int rank;
+    int nranks;
+    MPIR_COMM_RANK_SIZE(comm, rank, nranks);
 
     UT_array hierarchy[MAX_HIERARCHY_DEPTH];
     int dim = MPIR_Process.coords_dims - 1;
@@ -699,8 +700,9 @@ int MPII_Treeutil_tree_topology_aware_k_init(MPIR_Comm * comm, int k, int root, 
                                              MPIR_Treealgo_tree_t * ct)
 {
     int mpi_errno = MPI_SUCCESS;
-    int rank = comm->rank;
-    int nranks = comm->local_size;
+    int rank;
+    int nranks;
+    MPIR_COMM_RANK_SIZE(comm, rank, nranks);
 
     /* fall back to MPII_Treeutil_tree_topology_aware_init if k is less or equal to 2 */
     if (k <= 2) {
@@ -756,12 +758,11 @@ int MPII_Treeutil_tree_topology_aware_k_init(MPIR_Comm * comm, int k, int root, 
             } else {
                 /* rank level - build a tree on the ranks */
                 /* Do an allgather to know the current num_children on each rank */
-                MPIR_Errflag_t errflag = MPIR_ERR_NONE;
-                MPIR_Allgather_impl(&(ct->num_children), 1, MPIR_INT_INTERNAL,
-                                    num_childrens, 1, MPIR_INT_INTERNAL, comm, errflag);
-                if (mpi_errno) {
-                    goto fn_fail;
-                }
+                mpi_errno = MPIR_Allgather_impl(&(ct->num_children), 1, MPIR_INT_INTERNAL,
+                                                num_childrens, 1, MPIR_INT_INTERNAL, comm,
+                                                MPIR_COLL_ATTR_SYNC);
+                MPIR_ERR_CHECK(mpi_errno);
+
                 int switch_leader = tree_ut_int_elt(&level->ranks, level->root_idx);
                 mpi_errno =
                     MPII_Treeutil_tree_kary_init_topo_aware(level->myrank_idx,
@@ -1116,8 +1117,9 @@ int MPII_Treeutil_tree_topology_wave_init(MPIR_Comm * comm, int k, int root, boo
                                           int lat_same_switches, MPIR_Treealgo_tree_t * ct)
 {
     int mpi_errno = MPI_SUCCESS;
-    int rank = comm->rank;
-    int nranks = comm->local_size;
+    int rank;
+    int nranks;
+    MPIR_COMM_RANK_SIZE(comm, rank, nranks);
     int root_gr_sorted_idx = 0;
     int root_sw_sorted_idx = 0;
     int group_offset = 0;

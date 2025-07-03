@@ -9,7 +9,6 @@
 int MPIR_TSP_Ibarrier_sched_intra_k_dissemination(MPIR_Comm * comm, int k, MPIR_TSP_sched_t sched)
 {
     int mpi_errno = MPI_SUCCESS;
-    MPIR_Errflag_t errflag ATTRIBUTE((unused)) = MPIR_ERR_NONE;
     int i, j, nranks, rank;
     int p_of_k, shift, to, from;        /* minimum power of k that is greater than or equal to number of ranks */
     int nphases = 0;
@@ -19,8 +18,7 @@ int MPIR_TSP_Ibarrier_sched_intra_k_dissemination(MPIR_Comm * comm, int k, MPIR_
 
     MPIR_FUNC_ENTER;
 
-    nranks = MPIR_Comm_size(comm);
-    rank = MPIR_Comm_rank(comm);
+    MPIR_COMM_RANK_SIZE(comm, rank, nranks);
 
     mpi_errno = MPIR_Sched_next_tag(comm, &tag);
     if (mpi_errno)

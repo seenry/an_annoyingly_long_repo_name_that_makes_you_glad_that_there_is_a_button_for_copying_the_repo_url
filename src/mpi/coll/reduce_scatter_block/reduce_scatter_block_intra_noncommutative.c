@@ -24,12 +24,11 @@ int MPIR_Reduce_scatter_block_intra_noncommutative(const void *sendbuf,
                                                    void *recvbuf,
                                                    MPI_Aint recvcount,
                                                    MPI_Datatype datatype,
-                                                   MPI_Op op,
-                                                   MPIR_Comm * comm_ptr, MPIR_Errflag_t errflag)
+                                                   MPI_Op op, MPIR_Comm * comm_ptr, int coll_attr)
 {
     int mpi_errno = MPI_SUCCESS;
-    int comm_size = comm_ptr->local_size;
-    int rank = comm_ptr->rank;
+    int comm_size;
+    int rank;
     int log2_comm_size;
     int i, k;
     MPI_Aint true_extent, true_lb;
@@ -38,6 +37,8 @@ int MPIR_Reduce_scatter_block_intra_noncommutative(const void *sendbuf,
     void *tmp_buf1;
     void *result_ptr;
     MPIR_CHKLMEM_DECL();
+
+    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
     MPIR_Type_get_true_extent_impl(datatype, &true_lb, &true_extent);
 
@@ -97,7 +98,7 @@ int MPIR_Reduce_scatter_block_intra_noncommutative(const void *sendbuf,
                                   size, datatype, peer, MPIR_REDUCE_SCATTER_BLOCK_TAG,
                                   incoming_data + recv_offset * true_extent,
                                   size, datatype, peer, MPIR_REDUCE_SCATTER_BLOCK_TAG,
-                                  comm_ptr, MPI_STATUS_IGNORE, errflag);
+                                  comm_ptr, MPI_STATUS_IGNORE, coll_attr);
         MPIR_ERR_CHECK(mpi_errno);
         /* always perform the reduction at recv_offset, the data at send_offset
          * is now our peer's responsibility */

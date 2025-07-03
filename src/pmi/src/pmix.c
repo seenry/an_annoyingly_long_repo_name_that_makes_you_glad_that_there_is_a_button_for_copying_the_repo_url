@@ -215,7 +215,7 @@ pmix_status_t PMIx_Fence(const pmix_proc_t procs[], size_t nprocs,
             group_str = MPL_malloc(nprocs * 8, MPL_MEM_OTHER);  /* assume each integer fits in 8 chars */
             char *s = group_str;
             for (int i = 0; i < nprocs; i++) {
-                int n = sprintf(s, "%d,", procs[i].rank);
+                int n = snprintf(s, 8, "%d,", procs[i].rank);
                 s += n;
             }
             /* overwrite the last comma */
@@ -235,6 +235,18 @@ pmix_status_t PMIx_Fence(const pmix_proc_t procs[], size_t nprocs,
     return pmi_errno;
   fn_fail:
     goto fn_exit;
+}
+
+pmix_status_t PMIx_Fence_nb(const pmix_proc_t procs[], size_t nprocs,
+                            const pmix_info_t info[], size_t ninfo,
+                            pmix_op_cbfunc_t cbfunc, void *cbdata)
+{
+    return PMIX_ERR_NOT_SUPPORTED;
+}
+
+void PMIx_Progress(void)
+{
+    /* no-op */
 }
 
 pmix_status_t PMIx_Get(const pmix_proc_t * proc, const char key[],

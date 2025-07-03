@@ -32,8 +32,7 @@ int MPIR_Alltoall_intra_scattered(const void *sendbuf,
                                   MPI_Datatype sendtype,
                                   void *recvbuf,
                                   MPI_Aint recvcount,
-                                  MPI_Datatype recvtype,
-                                  MPIR_Comm * comm_ptr, MPIR_Errflag_t errflag)
+                                  MPI_Datatype recvtype, MPIR_Comm * comm_ptr, int coll_attr)
 {
     int comm_size, i;
     MPI_Aint sendtype_extent, recvtype_extent;
@@ -42,8 +41,7 @@ int MPIR_Alltoall_intra_scattered(const void *sendbuf,
     MPI_Status *starray;
     MPIR_CHKLMEM_DECL();
 
-    comm_size = comm_ptr->local_size;
-    rank = comm_ptr->rank;
+    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
 #ifdef HAVE_ERROR_CHECKING
     MPIR_Assert(sendbuf != MPI_IN_PLACE);
@@ -79,7 +77,7 @@ int MPIR_Alltoall_intra_scattered(const void *sendbuf,
             mpi_errno = MPIC_Isend((char *) sendbuf +
                                    dst * sendcount * sendtype_extent,
                                    sendcount, sendtype, dst,
-                                   MPIR_ALLTOALL_TAG, comm_ptr, &reqarray[i + ss], errflag);
+                                   MPIR_ALLTOALL_TAG, comm_ptr, &reqarray[i + ss], coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
         }
 

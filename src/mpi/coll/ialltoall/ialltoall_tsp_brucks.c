@@ -52,8 +52,6 @@ brucks_sched_pup(int pack, void *rbuf, void *pupbuf, MPI_Datatype rtype, MPI_Ain
     int counter;
     int sink_id, vtx_id;
     int mpi_errno = MPI_SUCCESS;
-    MPIR_Errflag_t errflag ATTRIBUTE((unused)) = MPIR_ERR_NONE;
-
     MPIR_FUNC_ENTER;
 
     MPIR_Datatype_get_extent_macro(rtype, type_extent);
@@ -138,7 +136,7 @@ MPIR_TSP_Ialltoall_sched_intra_brucks(const void *sendbuf, MPI_Aint sendcount,
     void *tmp_buf = NULL;
     const void *senddata;
     int tag;
-    MPIR_Errflag_t errflag ATTRIBUTE((unused)) = MPIR_ERR_NONE;
+    int coll_attr ATTRIBUTE((unused)) = 0;
 
     MPIR_CHKLMEM_DECL();
 
@@ -156,8 +154,7 @@ MPIR_TSP_Ialltoall_sched_intra_brucks(const void *sendbuf, MPI_Aint sendcount,
 
     is_inplace = (sendbuf == MPI_IN_PLACE);
 
-    rank = MPIR_Comm_rank(comm);
-    size = MPIR_Comm_size(comm);
+    MPIR_COMM_RANK_SIZE(comm, rank, size);
 
     max = size - 1;
 

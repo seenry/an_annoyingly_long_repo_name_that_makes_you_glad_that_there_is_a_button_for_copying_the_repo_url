@@ -82,7 +82,7 @@ static void set_rma_fi_info(MPIR_Win * win, struct fi_info *finfo)
      * Accumulate ordering cannot easily be changed once the window has been created.
      * OFI implementation ignores acc ordering hints issued in MPI_WIN_SET_INFO()
      * after window is created. */
-    finfo->tx_attr->msg_order = FI_ORDER_NONE;  /* FI_ORDER_NONE is an alias for the value 0 */
+    finfo->tx_attr->msg_order = 0;      /* FI_ORDER_NONE is deprecated since OFI 2.0.0 */
     if ((MPIDIG_WIN(win, info_args).accumulate_ordering & MPIDIG_ACCU_ORDER_RAR) ==
         MPIDIG_ACCU_ORDER_RAR)
 #ifdef FI_ORDER_ATOMIC_RAR
@@ -133,7 +133,7 @@ static int win_allgather(MPIR_Win * win, void *base, int disp_unit)
              * available to the processes involved in the RMA window. Use the current maximum + 1
              * to ensure that the key is available for all processes. */
             mpi_errno = MPIR_Allreduce(&MPIDI_OFI_global.global_max_optimized_mr_key, &local_key, 1,
-                                       MPI_UNSIGNED, MPI_MAX, comm_ptr, MPIR_ERR_NONE);
+                                       MPI_UNSIGNED, MPI_MAX, comm_ptr, MPIR_COLL_ATTR_SYNC);
             MPIR_ERR_CHECK(mpi_errno);
 
             if (local_key + 1 < MPIDI_OFI_NUM_OPTIMIZED_MEMORY_REGIONS) {
@@ -216,7 +216,7 @@ static int win_allgather(MPIR_Win * win, void *base, int disp_unit)
     }
 
     /* Check if any process fails to register. If so, release local MR and force AM path. */
-    MPIR_Allreduce(&rc, &allrc, 1, MPIR_INT_INTERNAL, MPI_MIN, comm_ptr, MPIR_ERR_NONE);
+    MPIR_Allreduce(&rc, &allrc, 1, MPIR_INT_INTERNAL, MPI_MIN, comm_ptr, MPIR_COLL_ATTR_SYNC);
     if (allrc < 0) {
         if (rc >= 0 && MPIDI_OFI_WIN(win).mr)
             MPIDI_OFI_CALL(fi_close(&MPIDI_OFI_WIN(win).mr->fid), fi_close);
@@ -240,7 +240,8 @@ static int win_allgather(MPIR_Win * win, void *base, int disp_unit)
 
     mpi_errno = MPIR_Allgather(MPI_IN_PLACE, 0,
                                MPI_DATATYPE_NULL,
-                               winfo, sizeof(*winfo), MPIR_BYTE_INTERNAL, comm_ptr, MPIR_ERR_NONE);
+                               winfo, sizeof(*winfo), MPIR_BYTE_INTERNAL, comm_ptr,
+                               MPIR_COLL_ATTR_SYNC);
     MPIR_ERR_CHECK(mpi_errno);
 
     if (!MPIDI_OFI_ENABLE_MR_PROV_KEY && !MPIDI_OFI_ENABLE_MR_VIRT_ADDRESS) {
@@ -962,7 +963,7 @@ int MPIDI_OFI_mpi_win_attach_hook(MPIR_Win * win, void *base, MPI_Aint size)
     }
 
     /* Check if any process fails to register. If so, release local MR and force AM path. */
-    MPIR_Allreduce(&rc, &allrc, 1, MPIR_INT_INTERNAL, MPI_MIN, comm_ptr, MPIR_ERR_NONE);
+    MPIR_Allreduce(&rc, &allrc, 1, MPIR_INT_INTERNAL, MPI_MIN, comm_ptr, MPIR_COLL_ATTR_SYNC);
     if (allrc < 0) {
         if (rc >= 0)
             MPIDI_OFI_CALL(fi_close(&mr->fid), fi_close);
@@ -985,7 +986,7 @@ int MPIDI_OFI_mpi_win_attach_hook(MPIR_Win * win, void *base, MPI_Aint size)
     mpi_errno = MPIR_Allgather(MPI_IN_PLACE, 0,
                                MPI_DATATYPE_NULL,
                                target_mrs, sizeof(dwin_target_mr_t), MPIR_BYTE_INTERNAL, comm_ptr,
-                               MPIR_ERR_NONE);
+                               MPIR_COLL_ATTR_SYNC);
     MPIR_ERR_CHECK(mpi_errno);
 
     /* Insert each remote MR which will be searched when issuing an RMA operation
@@ -1040,7 +1041,7 @@ int MPIDI_OFI_mpi_win_detach_hook(MPIR_Win * win, const void *base)
     target_bases[comm_ptr->rank] = base;
     mpi_errno = MPIR_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL,
                                target_bases, sizeof(const void *), MPIR_BYTE_INTERNAL, comm_ptr,
-                               MPIR_ERR_NONE);
+                               MPIR_COLL_ATTR_SYNC);
     MPIR_ERR_CHECK(mpi_errno);
 
     /* Search and delete each remote MR */

@@ -21,7 +21,7 @@ int MPII_Scatter_for_bcast(void *buffer ATTRIBUTE((unused)),
                            MPI_Datatype datatype ATTRIBUTE((unused)),
                            int root,
                            MPIR_Comm * comm_ptr,
-                           MPI_Aint nbytes, void *tmp_buf, int is_contig, MPIR_Errflag_t errflag)
+                           MPI_Aint nbytes, void *tmp_buf, int is_contig, int coll_attr)
 {
     MPI_Status status;
     int rank, comm_size, src, dst;
@@ -30,8 +30,7 @@ int MPII_Scatter_for_bcast(void *buffer ATTRIBUTE((unused)),
     MPI_Aint scatter_size, recv_size = 0;
     MPI_Aint curr_size, send_size;
 
-    comm_size = comm_ptr->local_size;
-    rank = comm_ptr->rank;
+    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
     relative_rank = (rank >= root) ? rank - root : rank - root + comm_size;
 
     /* use long message algorithm: binomial tree scatter followed by an allgather */
@@ -95,7 +94,7 @@ int MPII_Scatter_for_bcast(void *buffer ATTRIBUTE((unused)),
                 mpi_errno = MPIC_Send(((char *) tmp_buf +
                                        scatter_size * (relative_rank + mask)),
                                       send_size, MPIR_BYTE_INTERNAL, dst, MPIR_BCAST_TAG, comm_ptr,
-                                      errflag);
+                                      coll_attr);
                 MPIR_ERR_CHECK(mpi_errno);
 
                 curr_size -= send_size;

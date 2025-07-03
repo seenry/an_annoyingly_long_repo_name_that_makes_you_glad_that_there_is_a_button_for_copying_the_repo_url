@@ -56,8 +56,6 @@ MPIR_TSP_Iallgatherv_sched_intra_brucks(const void *sendbuf, MPI_Aint sendcount,
     int idx = 0, vtx_id;
     int prev_delta = 0;
     int count_length, top_count, bottom_count, left_count;
-    MPIR_Errflag_t errflag ATTRIBUTE((unused)) = MPIR_ERR_NONE;
-
     MPIR_FUNC_ENTER;
 
     int mpi_errno = MPI_SUCCESS;
@@ -68,8 +66,7 @@ MPIR_TSP_Iallgatherv_sched_intra_brucks(const void *sendbuf, MPI_Aint sendcount,
     MPIR_ERR_CHECK(mpi_errno);
 
     is_inplace = (sendbuf == MPI_IN_PLACE);
-    rank = MPIR_Comm_rank(comm);
-    size = MPIR_Comm_size(comm);
+    MPIR_COMM_RANK_SIZE(comm, rank, size);
     max = size - 1;
 
     if (is_inplace) {

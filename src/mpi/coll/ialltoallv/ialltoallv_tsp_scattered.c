@@ -20,13 +20,13 @@ int MPIR_TSP_Ialltoallv_sched_intra_scattered(const void *sendbuf, const MPI_Ain
     int invtcs;
     int tag;
     int *vtcs, *recv_id, *send_id;
-    MPIR_Errflag_t errflag ATTRIBUTE((unused)) = MPIR_ERR_NONE;
     MPIR_CHKLMEM_DECL();
 
     MPIR_Assert(!(sendbuf == MPI_IN_PLACE));
 
-    int size = MPIR_Comm_size(comm);
-    int rank = MPIR_Comm_rank(comm);
+    int size;
+    int rank;
+    MPIR_COMM_RANK_SIZE(comm, rank, size);
 
     MPI_Aint recvtype_lb, recvtype_extent;
     MPI_Aint sendtype_lb, sendtype_extent;

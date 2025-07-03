@@ -8,7 +8,7 @@ int MPIR_Allreduce_intra_circ_rs_ag(const void* sendbuf,
                                        MPI_Datatype datatype,
                                        MPI_Op op,
                                        MPIR_Comm* comm,
-                                       MPIR_Errflag_t errflag)
+                                       int coll_attr)
 {
     int mpi_errno = MPI_SUCCESS;
     
@@ -91,7 +91,7 @@ int MPIR_Allreduce_intra_circ_rs_ag(const void* sendbuf,
         int n_send = offsets[rank + skips[k] + n_blocks] - offsets[rank + skips[k]];
         if (n_send) {
             int send_offset = offsets[rank + skips[k]] - offsets[rank];
-            mpi_errno = MPIC_Isend(((char*) partial_buf__R) + (send_offset * extent), n_send, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[0], errflag);
+            mpi_errno = MPIC_Isend(((char*) partial_buf__R) + (send_offset * extent), n_send, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[0], coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
         }
         int n_recv = offsets[rank + n_blocks] - offsets[rank];
@@ -118,7 +118,7 @@ int MPIR_Allreduce_intra_circ_rs_ag(const void* sendbuf,
 
         int n_send = offsets[rank + n_blocks] - offsets[rank];
         if (n_send) {
-            mpi_errno = MPIC_Isend(partial_buf__R, n_send, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[0], errflag);
+            mpi_errno = MPIC_Isend(partial_buf__R, n_send, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[0], coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
         }
         int n_recv = offsets[rank + skips[k] + n_blocks] - offsets[rank + skips[k]];

@@ -13,7 +13,7 @@ int MPIR_Bcast_intra_tree(void *buffer,
                           MPI_Aint count,
                           MPI_Datatype datatype,
                           int root, MPIR_Comm * comm_ptr, int tree_type,
-                          int branching_factor, int is_nb, MPIR_Errflag_t errflag)
+                          int branching_factor, int is_nb, int coll_attr)
 {
     int rank, comm_size, src, dst, *p, j, k, lrank = -1, is_contig;
     int parent = -1, num_children = 0, num_req = 0, is_root = 0;
@@ -29,8 +29,7 @@ int MPIR_Bcast_intra_tree(void *buffer,
     MPIR_Treealgo_tree_t my_tree;
     MPIR_CHKLMEM_DECL();
 
-    comm_size = comm_ptr->local_size;
-    rank = comm_ptr->rank;
+    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
     /* If there is only one process, return */
     if (comm_size == 1)
@@ -147,10 +146,10 @@ int MPIR_Bcast_intra_tree(void *buffer,
 
             if (!is_nb) {
                 mpi_errno =
-                    MPIC_Send(send_buf, count, dtype, dst, MPIR_BCAST_TAG, comm_ptr, errflag);
+                    MPIC_Send(send_buf, count, dtype, dst, MPIR_BCAST_TAG, comm_ptr, coll_attr);
             } else {
                 mpi_errno = MPIC_Isend(send_buf, count, dtype, dst,
-                                       MPIR_BCAST_TAG, comm_ptr, &reqs[num_req++], errflag);
+                                       MPIR_BCAST_TAG, comm_ptr, &reqs[num_req++], coll_attr);
             }
             MPIR_ERR_CHECK(mpi_errno);
         }
@@ -161,10 +160,10 @@ int MPIR_Bcast_intra_tree(void *buffer,
 
             if (!is_nb) {
                 mpi_errno =
-                    MPIC_Send(send_buf, count, dtype, dst, MPIR_BCAST_TAG, comm_ptr, errflag);
+                    MPIC_Send(send_buf, count, dtype, dst, MPIR_BCAST_TAG, comm_ptr, coll_attr);
             } else {
                 mpi_errno = MPIC_Isend(send_buf, count, dtype, dst,
-                                       MPIR_BCAST_TAG, comm_ptr, &reqs[num_req++], errflag);
+                                       MPIR_BCAST_TAG, comm_ptr, &reqs[num_req++], coll_attr);
             }
             MPIR_ERR_CHECK(mpi_errno);
         }

@@ -142,7 +142,7 @@ int MPIDI_UCX_comm_addr_exchange(MPIR_Comm * comm)
     /* Use an smp algorithm explicitly that only require a working node_comm and node_roots_comm. */
     mpi_errno = MPIR_Allgather_intra_smp_no_order(my_rankname, rankname_len, MPIR_BYTE_INTERNAL,
                                                   all_ranknames, rankname_len, MPIR_BYTE_INTERNAL,
-                                                  comm, MPIR_ERR_NONE);
+                                                  comm, MPIR_COLL_ATTR_SYNC);
     MPIR_ERR_CHECK(mpi_errno);
 
     /* create av, skipping existing entries */
@@ -189,10 +189,10 @@ int MPIDI_UCX_init_local(int *tag_bits)
         UCP_PARAM_FIELD_REQUEST_SIZE |
         UCP_PARAM_FIELD_ESTIMATED_NUM_EPS | UCP_PARAM_FIELD_REQUEST_INIT;
 
-    if (MPICH_IS_THREADED) {
-        ucp_params.mt_workers_shared = 1;
-        ucp_params.field_mask |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
-    }
+#ifdef MPICH_IS_THREADED
+    ucp_params.mt_workers_shared = 1;
+    ucp_params.field_mask |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+#endif
 
     ucx_status = ucp_init(&ucp_params, config, &MPIDI_UCX_global.context);
     MPIDI_UCX_CHK_STATUS(ucx_status);

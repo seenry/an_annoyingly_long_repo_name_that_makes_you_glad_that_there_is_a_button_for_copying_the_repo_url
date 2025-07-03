@@ -25,15 +25,12 @@ int MPIR_TSP_Igather_sched_intra_tree(const void *sendbuf, MPI_Aint sendcount,
     MPIR_Treealgo_tree_t my_tree, parents_tree;
     int next_child, num_children, *child_subtree_size = NULL;
     int num_dependencies;
-    MPIR_Errflag_t errflag ATTRIBUTE((unused)) = MPIR_ERR_NONE;
     MPI_Aint *child_data_offset;
     MPIR_CHKLMEM_DECL();
 
     MPIR_FUNC_ENTER;
 
-
-    size = MPIR_Comm_size(comm);
-    rank = MPIR_Comm_rank(comm);
+    MPIR_COMM_RANK_SIZE(comm, rank, size);
     lrank = (rank - root + size) % size;        /* logical rank when root is non-zero */
 
     if (rank == root)

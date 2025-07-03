@@ -23,7 +23,7 @@ int MPIR_Allgather_intra_recursive_doubling(const void *sendbuf,
                                             void *recvbuf,
                                             MPI_Aint recvcount,
                                             MPI_Datatype recvtype,
-                                            MPIR_Comm * comm_ptr, MPIR_Errflag_t errflag)
+                                            MPIR_Comm * comm_ptr, int coll_attr)
 {
     int comm_size, rank;
     int mpi_errno = MPI_SUCCESS;
@@ -34,8 +34,7 @@ int MPIR_Allgather_intra_recursive_doubling(const void *sendbuf,
     MPI_Status status;
     int mask, dst_tree_root, my_tree_root, nprocs_completed, k, tmp_mask, tree_root;
 
-    comm_size = comm_ptr->local_size;
-    rank = comm_ptr->rank;
+    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
 #ifdef HAVE_ERROR_CHECKING
     /* Currently this algorithm can only handle power-of-2 comm_size.
@@ -81,7 +80,7 @@ int MPIR_Allgather_intra_recursive_doubling(const void *sendbuf,
                                       ((char *) recvbuf + recv_offset),
                                       (comm_size - dst_tree_root) * recvcount,
                                       recvtype, dst,
-                                      MPIR_ALLGATHER_TAG, comm_ptr, &status, errflag);
+                                      MPIR_ALLGATHER_TAG, comm_ptr, &status, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
             MPIR_Get_count_impl(&status, recvtype, &last_recv_cnt);
             curr_cnt += last_recv_cnt;
@@ -135,7 +134,7 @@ int MPIR_Allgather_intra_recursive_doubling(const void *sendbuf,
                     && (dst >= tree_root + nprocs_completed)) {
                     mpi_errno = MPIC_Send(((char *) recvbuf + offset),
                                           last_recv_cnt,
-                                          recvtype, dst, MPIR_ALLGATHER_TAG, comm_ptr, errflag);
+                                          recvtype, dst, MPIR_ALLGATHER_TAG, comm_ptr, coll_attr);
                     MPIR_ERR_CHECK(mpi_errno);
                 }
                 /* recv only if this proc. doesn't have data and sender
