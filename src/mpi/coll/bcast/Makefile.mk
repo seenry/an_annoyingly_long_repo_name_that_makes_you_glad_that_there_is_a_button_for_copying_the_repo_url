@@ -16,6 +16,8 @@ mpi_core_sources +=											\
     src/mpi/coll/bcast/bcast_intra_smp.c						\
     src/mpi/coll/bcast/bcast_intra_tree.c				\
     src/mpi/coll/bcast/bcast_intra_pipelined_tree.c			\
+    src/mpi/coll/bcast/bcast_intra_circ_vring.c \
+    src/mpi/coll/bcast/bcast_intra_circ_scatter.c \
     src/mpi/coll/bcast/bcast_inter_remote_send_local_bcast.c
 
 noinst_HEADERS += \

@@ -63,6 +63,8 @@ typedef enum {
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_smp,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_tree,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_pipelined_tree,
+    MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_circ_vring,
+    MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_circ_scatter,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_inter_remote_send_local_bcast,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_allcomm_nb,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Exscan_intra_recursive_doubling,
@@ -327,6 +329,9 @@ typedef struct {
                 int chunk_size;
                 int recv_pre_posted;
             } intra_pipelined_tree;
+            struct {
+                int chunk_size;
+            } intra_circ_vring;
         } bcast;
         struct {
             struct {
