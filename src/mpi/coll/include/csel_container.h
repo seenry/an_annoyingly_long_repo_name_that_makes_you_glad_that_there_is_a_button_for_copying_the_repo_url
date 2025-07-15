@@ -58,6 +58,8 @@ typedef enum {
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_binomial,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_scatter_recursive_doubling_allgather,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_scatter_ring_allgather,
+    MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_circ_vring,
+    MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_circ_qvring,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_smp,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_tree,
     MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_pipelined_tree,
@@ -325,6 +327,13 @@ typedef struct {
                 int chunk_size;
                 int recv_pre_posted;
             } intra_pipelined_tree;
+            struct {
+                int chunk_size;
+            } intra_circ_vring;
+            struct {
+                int chunk_size;
+                int q_len;
+            } intra_circ_qvring;
         } bcast;
         struct {
             struct {

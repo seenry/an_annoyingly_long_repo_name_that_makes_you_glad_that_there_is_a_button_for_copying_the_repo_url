@@ -200,9 +200,11 @@ cvars:
         smp                                     - Force smp algorithm
         scatter_recursive_doubling_allgather    - Force Scatter Recursive-Doubling Allgather
         scatter_ring_allgather                  - Force Scatter Ring
+        circ_qvring                             - Force queued circulant graph algorithm
+        circ_vring                              - Force circulant graph algorithm
         pipelined_tree                          - Force tree-based pipelined algorithm
         tree                                    - Force tree-based algorithm
-	
+
     - name        : MPIR_CVAR_BCAST_TREE_KVAL
       category    : COLLECTIVE
       type        : int
@@ -299,6 +301,26 @@ cvars:
       scope       : MPI_T_SCOPE_ALL_EQ
       description : >-
         Indicates the chunk size for pipelined bcast.
+
+    - name        : MPIR_CVAR_BCAST_CIRC_CHUNK_SIZE
+      category    : COLLECTIVE
+      type        : int
+      default     : 0
+      class       : none
+      verbosity   : MPI_T_VERBOSITY_USER_BASIC
+      scope       : MPI_T_SCOPE_ALL_EQ
+      description : >-
+        Determines message chunk size (0 forces single message send)
+
+    - name        : MPIR_CVAR_BCAST_CIRC_Q_LEN
+      category    : COLLECTIVE
+      type        : int
+      default     : 1
+      class       : none
+      verbosity   : MPI_T_VERBOSITY_USER_BASIC
+      scope       : MPI_T_SCOPE_ALL_EQ
+      description : >-
+        Determines how many bcast rounds can be in flight at once
 
     - name        : MPIR_CVAR_BCAST_RECV_PRE_POST
       category    : COLLECTIVE
