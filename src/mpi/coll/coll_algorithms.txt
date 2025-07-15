@@ -344,6 +344,12 @@ allreduce-intra:
         restrictions: commutative
     reduce_scatter_allgather
         restrictions: size-ge-pof2, builtin-op
+    circ_vring
+        restrictions: commutative
+    circ_rs_ag
+        restrictions: commutative
+    circ_rrs_ag
+        restrictions: commutative
     tree
         extra_params: tree_type, k, chunk_size, buffer_per_child
         cvar_params: TREE_TYPE, TREE_KVAL, TREE_PIPELINE_CHUNK_SIZE, TREE_BUFFER_PER_CHILD
