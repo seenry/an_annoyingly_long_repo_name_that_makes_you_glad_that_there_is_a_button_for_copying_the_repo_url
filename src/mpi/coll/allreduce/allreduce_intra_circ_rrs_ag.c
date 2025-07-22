@@ -1,6 +1,8 @@
 #include "mpiimpl.h"
 #include <math.h>
 
+#define CHUNK_OFFSET(cid) (((cid) * chunk_size) + (((cid) < rrr_cutoff) ? (cid) : rrr_cutoff))
+
 int MPIR_Allreduce_intra_circ_rrs_ag(const void* sendbuf,
                                        void* recvbuf,
                                        MPI_Aint count,
@@ -35,115 +37,176 @@ int MPIR_Allreduce_intra_circ_rrs_ag(const void* sendbuf,
     int cga_tree_depth = 1;
     while ((1 << cga_tree_depth) < comm_size) cga_tree_depth++;
 
+    // Allocate memory
     MPIR_CHKLMEM_DECL();
-
     int* skips;
     MPIR_CHKLMEM_MALLOC(skips, (cga_tree_depth+1) * sizeof(int));
-    int* offsets;
-    MPIR_CHKLMEM_MALLOC(offsets, (comm_size * 2) * sizeof(int));
-    void* partial_buf__R; void* inter_buf__T;
-    MPIR_CHKLMEM_MALLOC(partial_buf__R, count * necessary_extent);
-    MPIR_CHKLMEM_MALLOC(inter_buf__T, count * necessary_extent); // possible to lower footprint
+    void* intermed_buf;
+    MPIR_CHKLMEM_MALLOC(intermed_buf, count * necessary_extent); // its possible to lower this footprint
 
-    // Generate skip list
+    // Initialize coll data
     skips[cga_tree_depth] = comm_size;
     for (int i = cga_tree_depth-1; i >= 0; i--) {
         skips[i] = (skips[i+1] / 2) + (skips[i+1] & 0x1);
     }
 
-    // Split input and calculate block offsets 
-    offsets[0] = 0;
-    for (int i = 1; i < comm_size * 2; i++) {
-        int i_ = (i - 1 + comm_size) % comm_size;
-        int prev_block = (count/comm_size)
-                       + (i_ < (count%comm_size));
+    int chunk_size = count/comm_size;
+    int rrr_cutoff = count%comm_size;
 
-        offsets[i] = offsets[i-1] + prev_block;
+    intermed_buf = (void*) ((char*) intermed_buf - true_lb);
+
+    if (sendbuf != MPI_IN_PLACE) {
+        MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count, datatype);
     }
-
-    // Initialize scratch buffers
-    partial_buf__R = (void*) ((char*) partial_buf__R - true_lb);
-    inter_buf__T = (void*) ((char*) inter_buf__T - true_lb);
-
-    const void* input_buffer = (sendbuf == MPI_IN_PLACE) ? recvbuf :sendbuf;
-
-    // Initialize rotated buffer
-    for (int i = 0; i < comm_size; i++) {
-        int rel = rank + i;
-        int b_count = offsets[rel+1] - offsets[rel];
-        if (b_count != 0) {
-            int src_offset = offsets[rel % comm_size];
-            int dst_offset = offsets[rel] - offsets[rank];
-            MPIR_Localcopy(((char*) input_buffer) + (src_offset * extent), b_count, datatype,
-                           ((char*) partial_buf__R) + (dst_offset * extent), b_count, datatype);
-        }
-    }
-
-    MPIR_Request* requests[2];
 
     // Reduction
+    MPIR_Request* requests[4];
     for (int k = cga_tree_depth - 1; k >= 0; k--) {
         int to = (rank + skips[k]) % comm_size;
         int from = (rank - skips[k] + comm_size) % comm_size;
+        int n_req = 0;
+        // Send logic
+        int chunk0 = (rank + skips[k]) % comm_size;
+        int chunk1 = (rank + skips[k+1] - 1) % comm_size;
+        if (chunk0 <= chunk1) {
+            // Contiguous Send
+            int o0 = CHUNK_OFFSET(chunk0);
+            int n_send = CHUNK_OFFSET(chunk1+1) - o0;
+            if (n_send) {
+                int send_offset = o0 * extent;
+                mpi_errno = MPIC_Isend(((char*)recvbuf) + send_offset, n_send, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++], coll_attr);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
+        } else {
+            // Wrapping Send
+            int o0 = CHUNK_OFFSET(chunk0);
+            int n_send0 = count - o0;
+            if (n_send0) {
+                int send_offset = o0 * extent;
+                mpi_errno = MPIC_Isend(((char*)recvbuf) + send_offset, n_send0, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++], coll_attr);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
 
-        int n_blocks = skips[k+1] - skips[k];
+            int n_send1 = CHUNK_OFFSET(chunk1+1);
+            if (n_send1) {
+                mpi_errno = MPIC_Isend(recvbuf, n_send1, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++], coll_attr);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
+        }
 
-        int n_send = offsets[rank + skips[k] + n_blocks] - offsets[rank + skips[k]];
-        if (n_send) {
-            int send_offset = offsets[rank + skips[k]] - offsets[rank];
-            mpi_errno = MPIC_Isend(((char*) partial_buf__R) + (send_offset * extent), n_send, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[0], coll_attr);
-            MPIR_ERR_CHECK(mpi_errno);
+        // Recv logic
+        int rchunk0 = (from + skips[k]) % comm_size;
+        int rchunk1 = (from + skips[k+1] - 1) % comm_size;
+        int n_recv0 = 0;
+        int n_recv1 = 0;
+        if (rchunk0 <= rchunk1) {
+            // Contiguous Recv
+            n_recv0 = CHUNK_OFFSET(rchunk1+1) - CHUNK_OFFSET(rchunk0);
+            if (n_recv0) {
+                mpi_errno = MPIC_Irecv(intermed_buf, n_recv0, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++]);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
+        } else {
+            // Wrapping Recv
+            n_recv0 = count - CHUNK_OFFSET(rchunk0);
+            if (n_recv0) {
+                mpi_errno = MPIC_Irecv(intermed_buf, n_recv0, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++]);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
+
+            n_recv1 = CHUNK_OFFSET(rchunk1+1);
+            if (n_recv1) {
+                int recv_offset = n_recv0 * extent;
+                mpi_errno = MPIC_Irecv(((char*)intermed_buf) + recv_offset, n_recv1, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++]);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
         }
-        int n_recv = offsets[rank + n_blocks] - offsets[rank];
-        if (n_recv) {
-            mpi_errno = MPIC_Irecv(inter_buf__T, n_recv, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[(!!n_send)]);
+
+        // Handle requests
+        if (n_req) {
+            mpi_errno = MPIC_Waitall(n_req, requests, MPI_STATUSES_IGNORE);
             MPIR_ERR_CHECK(mpi_errno);
-        }
-        if (n_send || n_recv) {
-            mpi_errno = MPIC_Waitall((!!n_send) + (!!n_recv), requests, MPI_STATUSES_IGNORE);
-            MPIR_ERR_CHECK(mpi_errno);
-        }
-        if (n_recv) {
-            mpi_errno = MPIR_Reduce_local(inter_buf__T, partial_buf__R, n_recv, datatype, op);
-            MPIR_ERR_CHECK(mpi_errno);
+
+            if (n_recv0) {
+                int recv_offset = CHUNK_OFFSET(rank) * extent;
+                mpi_errno = MPIR_Reduce_local(intermed_buf, ((char*)recvbuf) + recv_offset, n_recv0, datatype, op);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
+            if (n_recv1) {
+                int intermed_offset = n_recv0 * extent;
+                mpi_errno = MPIR_Reduce_local(((char*)intermed_buf) + intermed_offset, recvbuf, n_recv1, datatype, op);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
         }
     }
 
     // Gather
+    {
+    int o0 = CHUNK_OFFSET(rank);
     for (int k = 0; k < cga_tree_depth; k++) {
         int to = (rank - skips[k] + comm_size) % comm_size;
         int from = (rank + skips[k]) % comm_size;
+        int n_req = 0;
         
-        int n_blocks = skips[k+1] - skips[k];
+        // int chunk0 = rank;
+        int chunk1 = (rank + skips[k+1] - skips[k] - 1) % comm_size;
+        if (rank <= chunk1) {
+            // Contiguous Send
+            int n_send = CHUNK_OFFSET(chunk1+1) - o0;
+            if (n_send) {
+                int send_offset = o0 * extent;
+                mpi_errno = MPIC_Isend(((char*)recvbuf) + send_offset, n_send, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++], coll_attr);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
+        } else {
+            // Wrapping Send
+            int n_send0 = count - o0;
+            if (n_send0) {
+                int send_offset = o0 * extent;
+                mpi_errno = MPIC_Isend(((char*)recvbuf) + send_offset, n_send0, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++], coll_attr);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
 
-        int n_send = offsets[rank + n_blocks] - offsets[rank];
-        if (n_send) {
-            mpi_errno = MPIC_Isend(partial_buf__R, n_send, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[0], coll_attr);
-            MPIR_ERR_CHECK(mpi_errno);
+            int n_send1 = CHUNK_OFFSET(chunk1+1);
+            if (n_send1) {
+                mpi_errno = MPIC_Isend(recvbuf, n_send1, datatype, to, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++], coll_attr);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
         }
-        int n_recv = offsets[rank + skips[k] + n_blocks] - offsets[rank + skips[k]];
-        if (n_recv) {
-            int recv_offset = offsets[rank + skips[k]] - offsets[rank];
-            mpi_errno = MPIC_Irecv(((char*) partial_buf__R) + (recv_offset * extent), n_recv, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[(!!n_send)]);
+
+        int rchunk0 = from;
+        int rchunk1 = (from + skips[k+1] - skips[k] - 1) % comm_size;
+        if (rchunk0 <= rchunk1) {
+            // Contiguous Recv
+            int n_recv = CHUNK_OFFSET(rchunk1+1) - CHUNK_OFFSET(rchunk0);
+            if (n_recv) {
+                int recv_offset = CHUNK_OFFSET((rank + skips[k]) % comm_size) * extent;
+                mpi_errno = MPIC_Irecv(((char*)recvbuf) + recv_offset, n_recv, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++]);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
+        } else {
+            // Wrapping Recv
+            int n_recv0 = count - CHUNK_OFFSET(rchunk0);
+            if (n_recv0) {
+                int recv_offset = CHUNK_OFFSET((rank + skips[k]) % comm_size) * extent;
+                mpi_errno = MPIC_Irecv(((char*)recvbuf) + recv_offset, n_recv0, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++]);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
+
+            int n_recv1 = CHUNK_OFFSET(rchunk1 + 1);
+            if (n_recv1) {
+                mpi_errno = MPIC_Irecv(recvbuf, n_recv1, datatype, from, MPIR_ALLREDUCE_TAG, comm, &requests[n_req++]);
+                MPIR_ERR_CHECK(mpi_errno);
+            }
         }
-        if (n_send || n_recv) {
-            mpi_errno = MPIC_Waitall((!!n_send) + (!!n_recv), requests, MPI_STATUSES_IGNORE);
+
+        if (n_req) {
+            mpi_errno = MPIC_Waitall(n_req, requests, MPI_STATUSES_IGNORE);
             MPIR_ERR_CHECK(mpi_errno);
         }
     }
-
-    // Undo rotation
-    for (int i = 0; i < comm_size; i++) {
-        int rel = rank + i;
-        int b_count = offsets[rel+1] - offsets[rel];
-        if (b_count != 0) {
-            int src_offset = offsets[rel] - offsets[rank];
-            int dst_offset = offsets[rel % comm_size];
-            MPIR_Localcopy(((char*) partial_buf__R) + (src_offset * extent), b_count, datatype,
-                           ((char*) recvbuf) + (dst_offset * extent), b_count, datatype);
-        }
     }
-    
+
     MPIR_CHKLMEM_FREEALL();
 
 fn_exit:
@@ -151,4 +214,3 @@ fn_exit:
 fn_fail:
     goto fn_exit;
 }
-
