@@ -116,7 +116,7 @@ int MPIR_Bcast_intra_circ_qvring(void *buffer,
     int offset = -x;
 
     int tru_ql = q_len;
-    if (tru_ql < 1) tru_ql = 1;
+    if (tru_ql < 2) tru_ql = 2; // 1 round can have a send and a recv
 
     struct qcbc_tracker_t* requests;
     MPIR_CHKLMEM_MALLOC(requests, tru_ql * sizeof(struct qcbc_tracker_t));
